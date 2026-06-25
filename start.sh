@@ -12,7 +12,12 @@ if [ "${XTTS_DIR}" = "auto" ]; then
   elif [ -d /workspace/skyrimnet-tts ]; then
     XTTS_DIR="/workspace/skyrimnet-tts"
   else
-    XTTS_DIR="/runpod-volume/skyrimnet-tts"
+    found_xtts="$(find /runpod-volume /workspace -maxdepth 4 -type d -name skyrimnet-tts 2>/dev/null | head -n 1 || true)"
+    if [ -n "${found_xtts}" ]; then
+      XTTS_DIR="${found_xtts}"
+    else
+      XTTS_DIR="/runpod-volume/skyrimnet-tts"
+    fi
   fi
 fi
 
@@ -42,19 +47,23 @@ if [ ! -d /runpod-volume ] && [ ! -d /workspace ]; then
 fi
 
 if [ ! -d "${XTTS_DIR}" ]; then
-  echo "[error] ${XTTS_DIR} not found." >&2
-  echo "[error] Attach the correct Network Volume: unique_silver_turkey_volume in EU-RO-1." >&2
+  echo "[warn] ${XTTS_DIR} not found." >&2
+  echo "[warn] Attach the correct Network Volume and use the same data center as the volume." >&2
   echo "[debug] /runpod-volume contents:" >&2
   ls -la /runpod-volume >&2 || true
   echo "[debug] /workspace contents:" >&2
   ls -la /workspace >&2 || true
-  exit 21
+  export PROXY_PORT="${PORT}"
+  export PROXY_STARTUP_ERROR="XTTS directory not found: ${XTTS_DIR}. Check Network Volume, data center, and mount path."
+  exec python -u /app/proxy_server.py
 fi
 
 if [ ! -x "${PYTHON_BIN}" ]; then
-  echo "[error] ${PYTHON_BIN} not found or not executable." >&2
-  echo "[error] The XTTS virtualenv is missing on the mounted volume." >&2
-  exit 22
+  echo "[warn] ${PYTHON_BIN} not found or not executable." >&2
+  echo "[warn] The XTTS virtualenv is missing on the mounted volume." >&2
+  export PROXY_PORT="${PORT}"
+  export PROXY_STARTUP_ERROR="XTTS Python virtualenv not found: ${PYTHON_BIN}."
+  exec python -u /app/proxy_server.py
 fi
 
 echo "[start] Stopping Jupyter if it owns port ${PORT}..."

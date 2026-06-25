@@ -99,3 +99,5 @@ endpoint: "https://YOUR_RUNPOD_ENDPOINT"
 - внутри volume нет `skyrimnet-tts`;
 - нет виртуального окружения `skyrimnet-tts/.venv/bin/python`;
 - порт `8888` занят Jupyter или другим процессом.
+
+Важно: RunPod worker должен запускаться в том же data center, где лежит Network Volume. Если volume в `EU-RO-1`, а workers стартуют в `US-NE-1` или `EUR-IS-2`, XTTS не будет найден.

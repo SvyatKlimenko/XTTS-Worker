@@ -9,6 +9,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 PORT = int(os.environ.get("PROXY_PORT", os.environ.get("PORT", "8888")))
 TARGET = os.environ.get("PROXY_TARGET", "http://127.0.0.1:8889").rstrip("/")
 TIMEOUT = int(os.environ.get("PROXY_TIMEOUT", "300"))
+STARTUP_ERROR = os.environ.get("PROXY_STARTUP_ERROR", "")
 
 
 class ProxyHandler(BaseHTTPRequestHandler):
@@ -22,9 +23,15 @@ class ProxyHandler(BaseHTTPRequestHandler):
         if self.path == "/ping":
             self._send_text(200, "ok")
             return
+        if STARTUP_ERROR:
+            self._send_text(503, STARTUP_ERROR)
+            return
         self._proxy("GET", self.path)
 
     def do_POST(self):
+        if STARTUP_ERROR:
+            self._send_text(503, STARTUP_ERROR)
+            return
         self._proxy("POST", self.path)
 
     def do_PUT(self):
@@ -82,6 +89,8 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
 def main():
     print(f"[proxy] Listening on 0.0.0.0:{PORT}, target={TARGET}", flush=True)
+    if STARTUP_ERROR:
+        print(f"[proxy] Startup error mode: {STARTUP_ERROR}", flush=True)
     server = ThreadingHTTPServer(("0.0.0.0", PORT), ProxyHandler)
     server.serve_forever()
 
