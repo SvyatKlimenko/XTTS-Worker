@@ -43,3 +43,4 @@ Keep the base URL only. Do not include `/tts_to_audio/` in the config value.
 - Do not commit API keys or private voice assets.
 - First cold start downloads XTTS model files into the Modal Volume.
 - Put reusable speaker WAV files under `/cache/speakers/<language>/<speaker>/` in the Modal Volume, or let `/create_and_store_latents` store uploaded WAV data.
+- If no SkyrimNet voice pack has been uploaded yet, startup seeds placeholder male/female reference WAVs for the built-in SkyrimNet fallback voice IDs so requests do not fail with missing-speaker 500s. Replace those samples in the Modal Volume with real voice references when you want proper character voices.

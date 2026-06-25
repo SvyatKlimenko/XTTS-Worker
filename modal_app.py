@@ -1,6 +1,7 @@
 import base64
 import os
 import re
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -11,6 +12,28 @@ APP_NAME = "skyrimnet-xtts"
 CACHE_VOLUME_NAME = "skyrimnet-xtts-cache"
 CACHE_PATH = Path("/cache")
 GPU_TYPE = os.environ.get("XTTS_MODAL_GPU", "L4")
+DEFAULT_SPEAKER_SAMPLE_URLS = {
+    "male": "https://raw.githubusercontent.com/art-from-the-machine/xtts-api-server-mantella/main/example/male.wav",
+    "female": "https://raw.githubusercontent.com/art-from-the-machine/xtts-api-server-mantella/main/example/female.wav",
+}
+SKYRIMNET_FALLBACK_VOICES = {
+    "femaleargonian",
+    "femalecommander",
+    "femalecommoner",
+    "femalecondescending",
+    "femaledarkelf",
+    "femaleelfhaughty",
+    "femaleeventoned",
+    "femalekhajiit",
+    "femaleorc",
+    "maleargonian",
+    "malecommoner",
+    "malecondescending",
+    "maleelfhaughty",
+    "maleeventoned",
+    "malekhajiit",
+    "maleorc",
+}
 
 
 cache_volume = modal.Volume.from_name(CACHE_VOLUME_NAME, create_if_missing=True)
@@ -58,6 +81,62 @@ def _decode_audio_payload(value: str) -> bytes:
     if "," in value and value.strip().lower().startswith("data:"):
         value = value.split(",", 1)[1]
     return base64.b64decode(value)
+
+
+def _speaker_gender(speaker_name: str) -> str:
+    return "female" if speaker_name.lower().startswith("female") else "male"
+
+
+def _seed_default_speakers() -> None:
+    speaker_root = CACHE_PATH / "speakers" / "ru"
+    sample_cache = CACHE_PATH / "speaker_seed_samples"
+    sample_cache.mkdir(parents=True, exist_ok=True)
+
+    samples: dict[str, Path] = {}
+    for gender, url in DEFAULT_SPEAKER_SAMPLE_URLS.items():
+        sample_path = sample_cache / f"{gender}.wav"
+        if not sample_path.exists():
+            print(f"[startup] Downloading placeholder {gender} speaker sample.")
+            with urllib.request.urlopen(url, timeout=60) as response:
+                sample_path.write_bytes(response.read())
+        samples[gender] = sample_path
+
+    seeded = False
+    for voice_id in SKYRIMNET_FALLBACK_VOICES:
+        dest_dir = speaker_root / voice_id
+        dest_path = dest_dir / "reference.wav"
+        if not dest_path.exists():
+            dest_dir.mkdir(parents=True, exist_ok=True)
+            dest_path.write_bytes(samples[_speaker_gender(voice_id)].read_bytes())
+            seeded = True
+
+    if seeded:
+        cache_volume.commit()
+
+
+def _install_speaker_fallback(xtts: Any) -> None:
+    if getattr(xtts, "_skyrimnet_modal_speaker_fallback_installed", False):
+        return
+
+    original_get_speaker_wav = xtts.get_speaker_wav
+
+    def get_speaker_wav_with_fallback(speaker_name_or_path: str, language_code: str):
+        try:
+            return original_get_speaker_wav(speaker_name_or_path, language_code)
+        except Exception:
+            gender = _speaker_gender(speaker_name_or_path)
+            fallback_voice = "femaleeventoned" if gender == "female" else "maleeventoned"
+            fallback_path = Path(xtts.speaker_folder) / language_code / fallback_voice / "reference.wav"
+            if fallback_path.exists():
+                print(
+                    f"[fallback] Speaker '{speaker_name_or_path}' not found for '{language_code}'. "
+                    f"Using '{fallback_voice}'."
+                )
+                return str(fallback_path)
+            raise
+
+    xtts.get_speaker_wav = get_speaker_wav_with_fallback
+    xtts._skyrimnet_modal_speaker_fallback_installed = True
 
 
 async def _read_latent_request(request: Any, xtts: Any) -> tuple[str, str, str | list[str] | None]:
@@ -218,7 +297,10 @@ def web():
     for folder in ("output", "xtts_models", "speakers", "latent_speaker_folder"):
         (CACHE_PATH / folder).mkdir(parents=True, exist_ok=True)
 
+    _seed_default_speakers()
+
     from xtts_api_server import server as xtts_server
 
+    _install_speaker_fallback(xtts_server.XTTS)
     _install_extra_routes(xtts_server.app, xtts_server)
     return xtts_server.app
