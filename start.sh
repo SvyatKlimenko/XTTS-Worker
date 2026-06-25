@@ -55,7 +55,7 @@ if [ ! -d "${XTTS_DIR}" ]; then
   ls -la /workspace >&2 || true
   export PROXY_PORT="${PORT}"
   export PROXY_STARTUP_ERROR="XTTS directory not found: ${XTTS_DIR}. Check Network Volume, data center, and mount path."
-  exec python -u /app/proxy_server.py
+  exec python3 -u /app/proxy_server.py
 fi
 
 if [ ! -x "${PYTHON_BIN}" ]; then
@@ -63,7 +63,7 @@ if [ ! -x "${PYTHON_BIN}" ]; then
   echo "[warn] The XTTS virtualenv is missing on the mounted volume." >&2
   export PROXY_PORT="${PORT}"
   export PROXY_STARTUP_ERROR="XTTS Python virtualenv not found: ${PYTHON_BIN}."
-  exec python -u /app/proxy_server.py
+  exec python3 -u /app/proxy_server.py
 fi
 
 echo "[start] Stopping Jupyter if it owns port ${PORT}..."
