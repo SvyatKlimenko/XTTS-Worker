@@ -79,27 +79,6 @@ cleanup() {
 }
 trap cleanup EXIT
 
-echo "[start] Waiting for XTTS health..."
-for i in $(seq 1 180); do
-  if curl -fsS "http://127.0.0.1:${XTTS_PORT}/health" >/dev/null 2>&1; then
-    echo "[start] XTTS is healthy."
-    break
-  fi
-
-  if ! kill -0 "${xtts_pid}" 2>/dev/null; then
-    echo "[error] XTTS process exited before becoming healthy." >&2
-    wait "${xtts_pid}" || true
-    exit 30
-  fi
-
-  if [ "${i}" -eq 180 ]; then
-    echo "[error] XTTS did not become healthy in time." >&2
-    exit 31
-  fi
-
-  sleep 2
-done
-
 echo "[start] Launching RunPod load balancer proxy..."
 export PROXY_PORT="${PORT}"
 export PROXY_TARGET="http://127.0.0.1:${XTTS_PORT}"

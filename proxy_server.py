@@ -20,7 +20,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path == "/ping":
-            self._proxy("GET", "/health")
+            self._send_text(200, "ok")
             return
         self._proxy("GET", self.path)
 
@@ -70,6 +70,14 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
+
+    def _send_text(self, status, text):
+        data = text.encode("utf-8")
+        self.send_response(status)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
 
 
 def main():
