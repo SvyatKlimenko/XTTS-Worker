@@ -1,103 +1,45 @@
-# SkyrimNet XTTS RunPod Serverless Worker
+# SkyrimNet XTTS Modal Worker
 
-Минимальный Docker worker для SkyrimNet XTTS.
+Modal deployment for a SkyrimNet-compatible XTTS HTTP endpoint.
 
-Идея: образ не хранит модели и не переустанавливает XTTS. Он ожидает, что RunPod Network Volume уже примонтирован, а внутри него есть готовая установка:
+Routes:
 
-```text
-/runpod-volume/skyrimnet-tts
-/runpod-volume/skyrimnet-tts/.venv/bin/python
-```
+- `GET /ping`
+- `GET /health`
+- `POST /tts_to_audio/`
+- `POST /create_and_store_latents`
 
-В обычных Pods RunPod часто монтирует volume как `/workspace`, а в Serverless Network Volume монтируется как `/runpod-volume`. Worker умеет найти оба варианта.
+The app runs the Mantella-compatible XTTS API server inside Modal, adds SkyrimNet health and latent routes, and stores downloaded models, generated audio, speaker samples, and latent JSON files in the Modal Volume `skyrimnet-xtts-cache`.
 
-## Важно
+The upstream package has conflicting dependency metadata, so the Modal image installs runtime dependencies from `requirements.txt` and then installs the server source with `--no-deps`.
 
-Этот вариант нужен для Serverless HTTP / Load Balancing endpoint, где SkyrimNet может обращаться к обычным HTTP endpoint:
-
-```text
-/health
-/tts_to_audio
-/create_and_store_latents
-```
-
-RunPod Load Balancer также проверяет `/ping`. Worker поднимает маленький proxy на `8888`: `/ping` отвечает сразу, чтобы Load Balancer не зависал во время cold start, остальные запросы проксируются в XTTS.
-
-Если в RunPod выбран только обычный queue/job endpoint с `/run`, SkyrimNet напрямую с ним работать не сможет без отдельного адаптера.
-
-## Сборка образа
-
-В папке с этим проектом:
+## Deploy
 
 ```powershell
-docker build -t YOUR_DOCKERHUB_NAME/skyrimnet-xtts-worker:latest .
-docker push YOUR_DOCKERHUB_NAME/skyrimnet-xtts-worker:latest
+$env:PYTHONIOENCODING='utf-8'
+python -m modal deploy modal_app.py
 ```
 
-Замени `YOUR_DOCKERHUB_NAME` на свой Docker Hub или GHCR namespace.
+The default GPU is `L4`. To try another GPU before deploy:
 
-## Настройка RunPod
-
-1. Открой RunPod -> Serverless -> New Endpoint.
-2. Выбери custom Docker image.
-3. Docker image:
-
-```text
-YOUR_DOCKERHUB_NAME/skyrimnet-xtts-worker:latest
+```powershell
+$env:XTTS_MODAL_GPU='A10G'
+python -m modal deploy modal_app.py
 ```
 
-4. GPU: начни с A4000 / A4500 / RTX 4000 / A40.
-5. Region / data center: `EU-RO-1`, чтобы совпадало с твоим volume.
-6. Network Volume: `unique_silver_turkey_volume`.
-7. Network Volume в Serverless будет доступен как `/runpod-volume`.
-8. HTTP port: `8888`.
-9. Environment variables:
+## SkyrimNet Config
 
-```text
-PORT=8888
-PORT_HEALTH=8888
-XTTS_PORT=8889
-XTTS_DIR=auto
-LOG_DIR=auto
-```
-
-10. Workers:
-
-```text
-Min workers: 0
-Max workers: 1
-```
-
-Для игры лучше перед запуском поставить active/min workers `1`, чтобы не ждать cold start. После игры вернуть `0`, чтобы не жрало деньги.
-
-## Проверка
-
-После запуска endpoint открой:
-
-```text
-https://YOUR_RUNPOD_ENDPOINT/health
-```
-
-Ожидаемый ответ примерно такой:
-
-```json
-{"status":"healthy","model_loaded":true}
-```
-
-В SkyrimNet в `XTTS.yaml` указывать нужно базовый URL без `/lab`:
+Set `XTTS.yaml` to the deployed Modal base URL:
 
 ```yaml
-endpoint: "https://YOUR_RUNPOD_ENDPOINT"
+endpoint: https://YOUR-MODAL-ENDPOINT.modal.run
+language: ru
 ```
 
-## Если не стартует
+Keep the base URL only. Do not include `/tts_to_audio/` in the config value.
 
-Смотри логи endpoint. Этот worker специально падает с понятной ошибкой, если:
+## Notes
 
-- volume не примонтирован в `/runpod-volume` или `/workspace`;
-- выбран не тот volume;
-- внутри volume нет `skyrimnet-tts`;
-- нет виртуального окружения `skyrimnet-tts/.venv/bin/python`;
-- порт `8888` занят Jupyter или другим процессом.
-
-Важно: RunPod worker должен запускаться в том же data center, где лежит Network Volume. Если volume в `EU-RO-1`, а workers стартуют в `US-NE-1` или `EUR-IS-2`, XTTS не будет найден.
+- Do not commit API keys or private voice assets.
+- First cold start downloads XTTS model files into the Modal Volume.
+- Put reusable speaker WAV files under `/cache/speakers/<language>/<speaker>/` in the Modal Volume, or let `/create_and_store_latents` store uploaded WAV data.

@@ -1,7 +1,0 @@
-.git
-.gitignore
-README.md
-*.log
-*.tmp
-__pycache__/
-.pytest_cache/
