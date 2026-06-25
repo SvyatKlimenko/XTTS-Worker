@@ -21,6 +21,8 @@
 /create_and_store_latents
 ```
 
+RunPod Load Balancer также проверяет `/ping`. Worker поднимает маленький proxy на `8888`: `/ping` мапится на XTTS `/health`, остальные запросы проксируются в XTTS.
+
 Если в RunPod выбран только обычный queue/job endpoint с `/run`, SkyrimNet напрямую с ним работать не сможет без отдельного адаптера.
 
 ## Сборка образа
@@ -53,6 +55,8 @@ YOUR_DOCKERHUB_NAME/skyrimnet-xtts-worker:latest
 
 ```text
 PORT=8888
+PORT_HEALTH=8888
+XTTS_PORT=8889
 XTTS_DIR=auto
 LOG_DIR=auto
 ```

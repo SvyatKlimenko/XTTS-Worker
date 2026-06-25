@@ -2,6 +2,7 @@
 set -euo pipefail
 
 PORT="${PORT:-8888}"
+XTTS_PORT="${XTTS_PORT:-8889}"
 XTTS_DIR="${XTTS_DIR:-auto}"
 LOG_DIR="${LOG_DIR:-auto}"
 
@@ -27,6 +28,7 @@ PYTHON_BIN="${XTTS_DIR}/.venv/bin/python"
 
 echo "[start] SkyrimNet XTTS worker"
 echo "[start] PORT=${PORT}"
+echo "[start] XTTS_PORT=${XTTS_PORT}"
 echo "[start] XTTS_DIR=${XTTS_DIR}"
 echo "[start] LOG_DIR=${LOG_DIR}"
 
@@ -69,4 +71,36 @@ fi
 
 cd "${XTTS_DIR}"
 echo "[start] Launching SkyrimNet XTTS..."
-exec "${PYTHON_BIN}" -u -m skyrimnet-xtts --server 0.0.0.0 --port "${PORT}"
+"${PYTHON_BIN}" -u -m skyrimnet-xtts --server 127.0.0.1 --port "${XTTS_PORT}" &
+xtts_pid="$!"
+
+cleanup() {
+  kill "${xtts_pid}" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+echo "[start] Waiting for XTTS health..."
+for i in $(seq 1 180); do
+  if curl -fsS "http://127.0.0.1:${XTTS_PORT}/health" >/dev/null 2>&1; then
+    echo "[start] XTTS is healthy."
+    break
+  fi
+
+  if ! kill -0 "${xtts_pid}" 2>/dev/null; then
+    echo "[error] XTTS process exited before becoming healthy." >&2
+    wait "${xtts_pid}" || true
+    exit 30
+  fi
+
+  if [ "${i}" -eq 180 ]; then
+    echo "[error] XTTS did not become healthy in time." >&2
+    exit 31
+  fi
+
+  sleep 2
+done
+
+echo "[start] Launching RunPod load balancer proxy..."
+export PROXY_PORT="${PORT}"
+export PROXY_TARGET="http://127.0.0.1:${XTTS_PORT}"
+exec "${PYTHON_BIN}" -u /app/proxy_server.py

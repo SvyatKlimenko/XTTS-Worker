@@ -1,6 +1,7 @@
 FROM runpod/pytorch:1.0.2-cu1281-torch280-ubuntu2404
 
 ENV PORT=8888 \
+    XTTS_PORT=8889 \
     XTTS_DIR=auto \
     LOG_DIR=auto \
     PYTHONUNBUFFERED=1
@@ -15,6 +16,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 COPY start.sh /app/start.sh
 COPY healthcheck.sh /app/healthcheck.sh
+COPY proxy_server.py /app/proxy_server.py
 RUN chmod +x /app/start.sh /app/healthcheck.sh
 
 EXPOSE 8888
